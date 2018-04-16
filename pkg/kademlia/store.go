@@ -23,7 +23,7 @@ type Store interface {
 	Init()
 
 	// GetAllKeysForReplication should return the keys of all data to be
-	// replicated across the network. Typically all data should be
+	// replicated across the Network. Typically all data should be
 	// replicated every tReplicate seconds.
 	GetAllKeysForReplication() [][]byte
 
@@ -44,7 +44,7 @@ type MemoryStore struct {
 }
 
 // GetAllKeysForReplication should return the keys of all data to be
-// replicated across the network. Typically all data should be
+// replicated across the Network. Typically all data should be
 // replicated every tReplicate seconds.
 func (ms *MemoryStore) GetAllKeysForReplication() [][]byte {
 	ms.mutex.Lock()

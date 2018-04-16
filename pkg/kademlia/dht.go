@@ -10,14 +10,15 @@ import (
 	"time"
 
 	b58 "github.com/jbenet/go-base58"
+	"fmt"
 )
 
 // DHT represents the state of the local node in the distributed hash table
 type DHT struct {
-	ht         *hashTable
-	options    *Options
-	networking networking
-	store      Store
+	ht      *hashTable
+	options *Options
+	network Network
+	store   Store
 }
 
 // Options contains configuration options for the local node
@@ -41,8 +42,8 @@ type Options struct {
 	// A logger interface
 	Logger log.Logger
 
-	// The nodes being used to bootstrap the network. Without a bootstrap
-	// node there is no way to connect to the network. NetworkNodes can be
+	// The nodes being used to bootstrap the Network. Without a bootstrap
+	// node there is no way to connect to the Network. NetworkNodes can be
 	// initialized via dht.NewNetworkNode()
 	BootstrapNodes []*NetworkNode
 
@@ -68,7 +69,7 @@ type Options struct {
 	// The maximum time to wait for a response to any message
 	TMsgTimeout time.Duration
 
-	messageCodec messageCodec
+	Network Network
 }
 
 // NewDHT initializes a new DHT node. A store and options struct must be
@@ -85,7 +86,12 @@ func NewDHT(store Store, options *Options) (*DHT, error) {
 
 	dht.store = store
 	dht.ht = ht
-	dht.networking = NewRealNetwork(options)
+
+	if options.Network != nil {
+		dht.network = options.Network
+	} else {
+		dht.network = NewUtpNetwork()
+	}
 
 	store.Init()
 
@@ -139,7 +145,7 @@ func (dht *DHT) getExpirationTime(key []byte) time.Time {
 	return time.Now().Add(dur)
 }
 
-// Store stores data on the network. This will trigger an iterateStore message.
+// Store stores data on the Network. This will trigger an iterateStore message.
 // The base58 encoded identifier will be returned if the store is successful.
 func (dht *DHT) Store(data []byte) (id string, err error) {
 	key := dht.store.GetKey(data)
@@ -154,7 +160,7 @@ func (dht *DHT) Store(data []byte) (id string, err error) {
 	return str, nil
 }
 
-// Get retrieves data from the networking using key. Key is the base58 encoded
+// Get retrieves data from the Network using key. Key is the base58 encoded
 // identifier of the data.
 func (dht *DHT) Get(key string) (data []byte, found bool, err error) {
 	keyBytes := b58.Decode(key)
@@ -192,7 +198,7 @@ func (dht *DHT) GetSelfID() string {
 // GetNetworkAddr returns the publicly accessible IP and Port of the local
 // node
 func (dht *DHT) GetNetworkAddr() string {
-	return dht.networking.getNetworkAddr()
+	return dht.network.getNetworkAddr()
 }
 
 // CreateSocket attempts to open a UDP socket on the port provided to options
@@ -207,16 +213,16 @@ func (dht *DHT) CreateSocket() error {
 		port = "3000"
 	}
 
-	netMsgInit()
-	dht.networking.init(dht.ht.Self)
+	dht.network.init(dht.ht.Self)
 
-	publicAddr, err := dht.networking.createSocket(ip, port, dht.options.UseStun, dht.options.StunAddr)
+	publicAddr, err := dht.network.setup(ip, port, dht.options.UseStun, dht.options.StunAddr)
+	fmt.Println("pulicAddr:", publicAddr)
 	if err != nil {
 		return err
 	}
 
 	if dht.options.UseStun {
-		dht.ht.setSelfAddr(*publicAddr)
+		dht.ht.setSelfAddr(publicAddr)
 	}
 
 	return nil
@@ -224,15 +230,15 @@ func (dht *DHT) CreateSocket() error {
 
 // Listen begins listening on the socket for incoming messages
 func (dht *DHT) Listen() error {
-	if !dht.networking.isInitialized() {
+	if !dht.network.isInitialized() {
 		return errors.New("socket not created")
 	}
 	go dht.listen()
 	go dht.timers()
-	return dht.networking.listen()
+	return dht.network.listen()
 }
 
-// Bootstrap attempts to bootstrap the network using the BootstrapNodes provided
+// Bootstrap attempts to bootstrap the Network using the BootstrapNodes provided
 // to the Options struct. This will trigger an iterativeFindNode to the provided
 // BootstrapNodes.
 func (dht *DHT) Bootstrap() error {
@@ -248,7 +254,7 @@ func (dht *DHT) Bootstrap() error {
 		query.Receiver = bn
 		query.Type = messageTypePing
 		if bn.ID == nil {
-			res, err := dht.networking.sendMessage(query, true, -1)
+			res, err := dht.network.sendMessage(query, true, -1)
 			if err != nil {
 				continue
 			}
@@ -274,7 +280,7 @@ func (dht *DHT) Bootstrap() error {
 					wg.Done()
 					return
 				case <-time.After(dht.options.TMsgTimeout):
-					dht.networking.cancelResponse(r)
+					dht.network.cancelResponse(r)
 					wg.Done()
 					return
 				}
@@ -292,19 +298,19 @@ func (dht *DHT) Bootstrap() error {
 	return nil
 }
 
-// Disconnect will trigger a disconnect from the network. All underlying sockets
+// Disconnect will trigger a disconnect from the Network. All underlying sockets
 // will be closed.
 func (dht *DHT) Disconnect() error {
 	// TODO if .CreateSocket() is called, but .Listen() is never called, we
 	// don't provide a way to close the socket
-	return dht.networking.disconnect()
+	return dht.network.disconnect()
 }
 
-// Iterate does an iterative search through the network. This can be done
+// Iterate does an iterative search through the Network. This can be done
 // for multiple reasons. These reasons include:
-//     iterativeStore - Used to store new information in the network.
-//     iterativeFindNode - Used to bootstrap the network.
-//     iterativeFindValue - Used to find a value among the network given a key.
+//     iterativeStore - Used to store new information in the Network.
+//     iterativeFindNode - Used to bootstrap the Network.
+//     iterativeFindValue - Used to find a value among the Network given a key.
 func (dht *DHT) iterate(t int, target []byte, data []byte) (value []byte, closest []*NetworkNode, err error) {
 	sl := dht.ht.getClosestContacts(alpha, target, []*NetworkNode{})
 
@@ -377,7 +383,7 @@ func (dht *DHT) iterate(t int, target []byte, data []byte) (value []byte, closes
 			}
 
 			// Send the async queries and wait for a response
-			res, err := dht.networking.sendMessage(query, true, -1)
+			res, err := dht.network.sendMessage(query, true, -1)
 			if err != nil {
 				// Node was unreachable for some reason. We will have to remove
 				// it from the shortlist, but we will keep it in our routing
@@ -408,7 +414,7 @@ func (dht *DHT) iterate(t int, target []byte, data []byte) (value []byte, closes
 					resultChan <- result
 					return
 				case <-time.After(dht.options.TMsgTimeout):
-					dht.networking.cancelResponse(r)
+					dht.network.cancelResponse(r)
 					return
 				}
 			}(r)
@@ -491,7 +497,7 @@ func (dht *DHT) iterate(t int, target []byte, data []byte) (value []byte, closes
 					queryData := &queryDataStore{}
 					queryData.Data = data
 					query.Data = queryData
-					dht.networking.sendMessage(query, false, -1)
+					dht.network.sendMessage(query, false, -1)
 				}
 				return nil, nil, nil
 			}
@@ -528,7 +534,7 @@ func (dht *DHT) addNode(node *node) {
 		query.Receiver = n
 		query.Sender = dht.ht.Self
 		query.Type = messageTypePing
-		res, err := dht.networking.sendMessage(query, true, -1)
+		res, err := dht.network.sendMessage(query, true, -1)
 		if err != nil {
 			bucket = append(bucket, node)
 			bucket = bucket[1:]
@@ -570,9 +576,9 @@ func (dht *DHT) timers() {
 
 			// Expiration
 			dht.store.ExpireKeys()
-		case <-dht.networking.getDisconnect():
+		case <-dht.network.getDisconnect():
 			t.Stop()
-			dht.networking.timersFin()
+			dht.network.timersFin()
 			return
 		}
 	}
@@ -581,10 +587,10 @@ func (dht *DHT) timers() {
 func (dht *DHT) listen() {
 	for {
 		select {
-		case msg := <-dht.networking.getMessage():
+		case msg := <-dht.network.getMessage():
 			if msg == nil {
 				// Disconnected
-				dht.networking.messagesFin()
+				dht.network.messagesFin()
 				return
 			}
 			switch msg.Type {
@@ -599,7 +605,7 @@ func (dht *DHT) listen() {
 				responseData := &responseDataFindNode{}
 				responseData.Closest = closest.Nodes
 				response.Data = responseData
-				dht.networking.sendMessage(response, false, msg.ID)
+				dht.network.sendMessage(response, false, msg.ID)
 			case messageTypeFindValue:
 				data := msg.Data.(*queryDataFindValue)
 				dht.addNode(newNode(msg.Sender))
@@ -617,7 +623,7 @@ func (dht *DHT) listen() {
 					responseData.Closest = closest.Nodes
 				}
 				response.Data = responseData
-				dht.networking.sendMessage(response, false, msg.ID)
+				dht.network.sendMessage(response, false, msg.ID)
 			case messageTypeStore:
 				data := msg.Data.(*queryDataStore)
 				dht.addNode(newNode(msg.Sender))
@@ -630,10 +636,10 @@ func (dht *DHT) listen() {
 				response.Sender = dht.ht.Self
 				response.Receiver = msg.Sender
 				response.Type = messageTypePing
-				dht.networking.sendMessage(response, false, msg.ID)
+				dht.network.sendMessage(response, false, msg.ID)
 			}
-		case <-dht.networking.getDisconnect():
-			dht.networking.messagesFin()
+		case <-dht.network.getDisconnect():
+			dht.network.messagesFin()
 			return
 		}
 	}

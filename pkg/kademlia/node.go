@@ -63,10 +63,7 @@ func areNodesEqual(n1 *NetworkNode, n2 *NetworkNode, allowNilID bool) bool {
 			return false
 		}
 	}
-	if !n1.Addr.IP.Equal(n2.Addr.IP) {
-		return false
-	}
-	if n1.Addr.Port != n2.Addr.Port {
+	if n1.Addr.String() != (n2.Addr.String()) {
 		return false
 	}
 	return true

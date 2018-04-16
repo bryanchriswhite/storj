@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/Storj/storj/pkg/kademlia"
+	kad "github.com/Storj/storj/pkg/kademlia"
 	"github.com/chzyer/readline"
 	"flag"
 	"fmt"
@@ -36,17 +36,18 @@ func main() {
 		os.Exit(0)
 	}
 
-	var bootstrapNodes []*kademlia.NetworkNode
+	var bootstrapNodes []*kad.NetworkNode
 	if *bIP != "" || *bPort != "" {
-		bootstrapNode := kademlia.NewNetworkNode(*bIP, *bPort)
+		bootstrapNode := kad.NewNetworkNode(*bIP, *bPort)
 		bootstrapNodes = append(bootstrapNodes, bootstrapNode)
 	}
 
-	dht, err := kademlia.NewDHT(&kademlia.MemoryStore{}, &kademlia.Options{
+	dht, err := kad.NewDHT(&kad.MemoryStore{}, &kad.Options{
 		BootstrapNodes: bootstrapNodes,
 		IP:             *ip,
 		Port:           *port,
 		UseStun:        *stun,
+		// Network:        kad.NewJsonRpcNetwork(),
 	})
 
 	fmt.Println("Opening socket..")

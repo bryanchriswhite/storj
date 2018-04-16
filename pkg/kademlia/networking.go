@@ -16,14 +16,14 @@ var (
 	errorValueNotFound = errors.New("Value not found")
 )
 
-type networking interface {
+type Network interface {
 	sendMessage(*message, bool, int64) (*expectedResponse, error)
 	getMessage() chan (*message)
 	messagesFin()
 	timersFin()
 	getDisconnect() chan (int)
 	init(self *NetworkNode)
-	createSocket(host string, port string, useStun bool, stunAddr string) (publicAddr *net.TCPAddr, err error)
+	setup(host string, port string, useStun bool, stunAddr string) (publicAddr net.Addr, err error)
 	listen() error
 	disconnect() error
 	cancelResponse(*expectedResponse)
@@ -31,7 +31,7 @@ type networking interface {
 	getNetworkAddr() string
 }
 
-type realNetworking struct {
+type UtpNetwork struct {
 	socket        *utp.Socket
 	sendChan      chan (*message)
 	recvChan      chan (*message)
@@ -59,21 +59,17 @@ type expectedResponse struct {
 	id    int64
 }
 
-func NewRealNetwork(options *Options) (rn *realNetworking) {
-	var codec *gobCodec
+func NewUtpNetwork() Network {
+	codec := &gobCodec{}
 
-	if options.messageCodec == nil {
-		codec = &gobCodec{}
-	}
-
-	rn = &realNetworking{
+	return &UtpNetwork{
 		messageCodec: codec,
 	}
-
-	return rn
 }
 
-func (rn *realNetworking) init(self *NetworkNode) {
+func (rn *UtpNetwork) init(self *NetworkNode) {
+	netMsgInit()
+
 	rn.self = self
 	rn.mutex = &sync.Mutex{}
 	rn.sendChan = make(chan (*message))
@@ -88,31 +84,31 @@ func (rn *realNetworking) init(self *NetworkNode) {
 	rn.initialized = true
 }
 
-func (rn *realNetworking) isInitialized() bool {
+func (rn *UtpNetwork) isInitialized() bool {
 	return rn.initialized
 }
 
-func (rn *realNetworking) getMessage() chan (*message) {
+func (rn *UtpNetwork) getMessage() chan (*message) {
 	return rn.recvChan
 }
 
-func (rn *realNetworking) getNetworkAddr() string {
+func (rn *UtpNetwork) getNetworkAddr() string {
 	return rn.remoteAddress
 }
 
-func (rn *realNetworking) messagesFin() {
+func (rn *UtpNetwork) messagesFin() {
 	rn.dcMessageChan <- 1
 }
 
-func (rn *realNetworking) getDisconnect() chan (int) {
+func (rn *UtpNetwork) getDisconnect() chan (int) {
 	return rn.dcStartChan
 }
 
-func (rn *realNetworking) timersFin() {
+func (rn *UtpNetwork) timersFin() {
 	rn.dcTimersChan <- 1
 }
 
-func (rn *realNetworking) createSocket(host string, port string, useStun bool, stunAddr string) (publicAddr *net.TCPAddr, err error) {
+func (rn *UtpNetwork) setup(host string, port string, useStun bool, stunAddr string) (publicAddr net.Addr, err error) {
 	rn.mutex.Lock()
 	defer rn.mutex.Unlock()
 	if rn.connected {
@@ -160,13 +156,13 @@ func (rn *realNetworking) createSocket(host string, port string, useStun bool, s
 	}
 
 	addr := &net.TCPAddr{
-		IP: net.ParseIP(host),
+		IP:   net.ParseIP(host),
 		Port: intPort,
 	}
 	return addr, nil
 }
 
-func (rn *realNetworking) sendMessage(msg *message, expectResponse bool, id int64) (*expectedResponse, error) {
+func (rn *UtpNetwork) sendMessage(msg *message, expectResponse bool, id int64) (*expectedResponse, error) {
 	rn.mutex.Lock()
 	if id == -1 {
 		id = rn.msgCounter
@@ -175,7 +171,7 @@ func (rn *realNetworking) sendMessage(msg *message, expectResponse bool, id int6
 	msg.ID = id
 	rn.mutex.Unlock()
 
-	conn, err := rn.socket.DialTimeout("["+msg.Receiver.Addr.IP.String()+"]:"+strconv.Itoa(msg.Receiver.Addr.Port), time.Second)
+	conn, err := rn.socket.DialTimeout(rn.self.Addr.String(), time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -208,14 +204,14 @@ func (rn *realNetworking) sendMessage(msg *message, expectResponse bool, id int6
 	return nil, nil
 }
 
-func (rn *realNetworking) cancelResponse(res *expectedResponse) {
+func (rn *UtpNetwork) cancelResponse(res *expectedResponse) {
 	rn.mutex.Lock()
 	defer rn.mutex.Unlock()
 	close(rn.responseMap[res.query.ID].ch)
 	delete(rn.responseMap, res.query.ID)
 }
 
-func (rn *realNetworking) disconnect() error {
+func (rn *UtpNetwork) disconnect() error {
 	rn.mutex.Lock()
 	defer rn.mutex.Unlock()
 	if !rn.connected {
@@ -236,7 +232,7 @@ func (rn *realNetworking) disconnect() error {
 	return err
 }
 
-func (rn *realNetworking) listen() error {
+func (rn *UtpNetwork) listen() error {
 	for {
 		conn, err := rn.socket.Accept()
 

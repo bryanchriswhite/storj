@@ -20,7 +20,7 @@ const (
 )
 
 const (
-	// a small number representing the degree of parallelism in network calls
+	// a small number representing the degree of parallelism in Network calls
 	alpha = 3
 
 	// the size in bits of the keys used to identify nodes and store and
@@ -36,7 +36,7 @@ type hashTable struct {
 	// The ID of the local node
 	Self *NetworkNode
 
-	// Routing table a list of all known nodes in the network
+	// Routing table a list of all known nodes in the Network
 	// Nodes within buckets are sorted by least recently seen e.g.
 	// [ ][ ][ ][ ][ ][ ][ ][ ][ ][ ][ ][ ][ ][ ][ ][ ][ ][ ][ ][ ][ ]
 	//  ^                                                           ^
@@ -71,7 +71,7 @@ func newHashTable(options *Options) (*hashTable, error) {
 	}
 
 	intPort, err := strconv.Atoi(options.Port)
-	addr := net.TCPAddr{
+	addr := &net.TCPAddr{
 		IP: net.ParseIP(options.IP),
 		Port: intPort,
 	}
@@ -92,8 +92,10 @@ func newHashTable(options *Options) (*hashTable, error) {
 	return ht, nil
 }
 
-func (ht *hashTable) setSelfAddr(addr net.TCPAddr) {
-	ht.Self.Addr = addr
+func (ht *hashTable) setSelfAddr(addr net.Addr) {
+	// a := new(net.TCPAddr)
+	// a := addr.(*net.TCPAddr)
+	ht.Self.Addr = *addr.(*net.TCPAddr)
 }
 
 func (ht *hashTable) resetRefreshTimeForBucket(bucket int) {

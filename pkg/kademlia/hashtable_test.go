@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// Create a new node and bootstrap it. All nodes in the network know of a
+// Create a new node and bootstrap it. All nodes in the Network know of a
 // single node closer to the original node. This continues until every k bucket
 // is occupied.
 func TestFindNodeAllBuckets(t *testing.T) {
@@ -28,7 +28,7 @@ func TestFindNodeAllBuckets(t *testing.T) {
 		},
 	})
 
-	dht.networking = networking
+	dht.network = networking
 	dht.CreateSocket()
 
 	go func() {
@@ -91,7 +91,7 @@ func TestAddNodeTimeout(t *testing.T) {
 		},
 	})
 
-	dht.networking = networking
+	dht.network = networking
 	dht.CreateSocket()
 
 	go func() {

@@ -426,7 +426,7 @@ func TestNetworkingSendError(t *testing.T) {
 		},
 	})
 
-	dht.networking = networking
+	dht.network = networking
 	dht.CreateSocket()
 
 	go func() {
@@ -467,7 +467,7 @@ func TestNodeResponseSendError(t *testing.T) {
 		},
 	})
 
-	dht.networking = networking
+	dht.network = networking
 	dht.CreateSocket()
 
 	queries := 0
@@ -523,7 +523,7 @@ func TestBucketRefresh(t *testing.T) {
 		},
 	})
 
-	dht.networking = networking
+	dht.network = networking
 	dht.CreateSocket()
 
 	queries := 0
@@ -582,7 +582,7 @@ func TestStoreReplication(t *testing.T) {
 		},
 	})
 
-	dht.networking = networking
+	dht.network = networking
 	dht.CreateSocket()
 
 	go func() {
