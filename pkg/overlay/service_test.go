@@ -123,3 +123,23 @@ func TestNewClient_LoadTLS(t *testing.T) {
   assert.NoError(t, err)
   assert.NotNil(t, r)
 }
+
+func TestRemoteClientServer(t *testing.T) {
+  var err error
+
+  tmpPath, err := ioutil.TempDir("", "TestRemoteClient")
+  if err != nil {
+    panic(err)
+  }
+  defer os.RemoveAll(tmpPath)
+
+  setFlags(filepath.Join(tmpPath, "remote"), true)
+
+  address := "127.0.0.1:8080"
+  c, err := NewClient(&address)
+  assert.NoError(t, err)
+
+  r, err := c.Lookup(context.Background(), &proto.LookupRequest{})
+  assert.NoError(t, err)
+  assert.NotNil(t, r)
+}

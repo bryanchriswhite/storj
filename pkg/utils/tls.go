@@ -43,7 +43,7 @@ type TLSFileOptions struct {
 func (t *TLSFileOptions) EnsureAbsPaths() (_ error) {
   if t.CertAbsPath == "" {
     if t.CertRelPath == "" {
-      return errs.New("No relative certificate path provided")
+      return errs.New("No certificate path provided")
     }
 
     certAbsPath, err := filepath.Abs(t.CertRelPath)
@@ -54,9 +54,9 @@ func (t *TLSFileOptions) EnsureAbsPaths() (_ error) {
     t.CertAbsPath = certAbsPath
   }
 
-  if !t.Client && t.KeyAbsPath == "" {
+  if t.KeyAbsPath == "" {
     if t.KeyRelPath == "" {
-      return errs.New("No relative key path provided")
+      return errs.New("No key path provided")
     }
 
     keyAbsPath, err := filepath.Abs(t.KeyRelPath)
@@ -88,15 +88,13 @@ func (t *TLSFileOptions) EnsureExists() (_ error) {
     certMissing = true
   }
 
-  if !t.Client {
-    if _, err := os.Stat(t.KeyAbsPath); err != nil {
-      if !IsNotExist(err) {
-        return errs.New(err.Error())
-      }
-
-      errMessage += fmt.Sprintf("%s and creation disabled\n", err)
-      keyMissing = true
+  if _, err := os.Stat(t.KeyAbsPath); err != nil {
+    if !IsNotExist(err) {
+      return errs.New(err.Error())
     }
+
+    errMessage += fmt.Sprintf("%s and creation disabled\n", err)
+    keyMissing = true
   }
 
   // NB: even when `overwrite` is false, this WILL overwrite

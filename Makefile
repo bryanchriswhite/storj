@@ -36,7 +36,7 @@ build-binaries:
 	docker build -t overlay .
 
 run-overlay:
-	docker network create test-net
+	docker network create
 
 	docker run -d \
 		--name redis \
@@ -51,6 +51,10 @@ run-overlay:
 		-e REDIS_PASSWORD="" \
 		-e REDIS_DB=1 \
 		-e OVERLAY_PORT=8080 \
+		-e TLS_CERT_PATH=/etc/ssl/certs/storj.cert \
+		-e TLS_KEY_PATH=/etc/ssl/private/storj.key \
+		-e TLS_HOSTS="127.0.0.1" \
+		-p 127.0.0.1:8080:8080 \
 		overlay
 
 clean-local:
