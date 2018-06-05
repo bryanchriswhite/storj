@@ -36,7 +36,7 @@ build-binaries:
 	docker build -t overlay .
 
 run-overlay:
-	docker network create
+	docker network create test-net
 
 	docker run -d \
 		--name redis \
