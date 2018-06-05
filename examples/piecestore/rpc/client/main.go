@@ -18,7 +18,7 @@ import (
 
 	"google.golang.org/grpc"
 
-	"storj.io/storj/examples/piecestore/rpc/client/utils"
+	"storj.io/storj/pkg/piecestore"
 	"storj.io/storj/pkg/piecestore/rpc/client"
 )
 
@@ -63,19 +63,15 @@ func main() {
 					return argError.New(fmt.Sprintf("Path (%s) is a directory, not a file", c.Args().Get(0)))
 				}
 
-				var fileOffset, storeOffset int64 = 0, 0
 				var length = fileInfo.Size()
 				var ttl = time.Now().Unix() + 86400
 
-				id, err := utils.DetermineID(file, fileOffset, length)
-				if err != nil {
-					return err
-				}
-
 				// Created a section reader so that we can concurrently retrieve the same file.
-				dataSection := io.NewSectionReader(file, fileOffset, length)
+				dataSection := io.NewSectionReader(file, 0, length)
 
-				writer, err := routeClient.StorePieceRequest(id, fileOffset, length, ttl, storeOffset)
+				id := pstore.DetermineID()
+
+				writer, err := routeClient.StorePieceRequest(id, ttl)
 				if err != nil {
 					fmt.Printf("Failed to send meta data to server to store file of id: %s\n", id)
 					return err
