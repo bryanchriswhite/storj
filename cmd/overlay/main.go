@@ -1,11 +1,17 @@
 // Copyright (C) 2018 Storj Labs, Inc.
 // See LICENSE for copying information.
 
-package overlay
+package main
 
 import (
+	"io/ioutil"
+	"encoding/json"
+
 	"github.com/spf13/cobra"
+	"github.com/zeebo/errs"
+
 	"storj.io/storj/pkg/cfgstruct"
+	"storj.io/storj/pkg/process"
 )
 
 var (
@@ -25,24 +31,43 @@ var (
 	}
 
 	addCfg struct {
-		nodeListPath string
+		nodesPath string
 	}
 
-	clearCfg struct {}
+	clearCfg struct {
+		exceptPath string
+	}
 )
 
 func init() {
-	rootCmd.AddCommand(newCACmd)
-	cfgstruct.Bind(newCACmd.Flags(), &newCACfg)
-	cfgstruct.Bind(idCmd.Flags(), &idCfg)
+	rootCmd.AddCommand(addCmd)
+	cfgstruct.Bind(addCmd.Flags(), &addCfg)
+	cfgstruct.Bind(clearCmd.Flags(), &clearCfg)
 }
 
 func cmdAdd(cmd *cobra.Command, args []string) (err error) {
-	// TODO
+	j, err := ioutil.ReadFile(addCfg.nodesPath)
+	if err != nil {
+		return errs.Wrap(err)
+	}
+
+	type id string
+	type address string
+	var nodes map[id]address
+	if err := json.Unmarshal(j, nodes); err != nil {
+		return errs.Wrap(err)
+	}
+
+	// TODO add records to cache
+
 	return nil
 }
 
 func cmdClear(cmd *cobra.Command, args []string) (err error) {
 	// TODO
 	return nil
+}
+
+func main() {
+	process.Exec(rootCmd)
 }
