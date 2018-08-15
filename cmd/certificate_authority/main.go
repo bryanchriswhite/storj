@@ -1,7 +1,7 @@
 // Copyright (C) 2018 Storj Labs, Inc.
 // See LICENSE for copying information.
 
-package certificate_authority
+package main
 
 import (
 	"fmt"
@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	RootCmd = &cobra.Command{
+	rootCmd = &cobra.Command{
 		Use:   "ca",
 		Short: "Certificate authority",
 	}
@@ -29,7 +29,7 @@ var (
 		RunE:  cmdID,
 	}
 
-	newCACfg struct {
+	newCfg struct {
 		CA provider.CASetupConfig
 	}
 
@@ -39,14 +39,14 @@ var (
 )
 
 func init() {
-	RootCmd.AddCommand(newCmd)
-	RootCmd.AddCommand(idCmd)
-	cfgstruct.Bind(newCmd.Flags(), &newCACfg)
+	rootCmd.AddCommand(newCmd)
+	rootCmd.AddCommand(idCmd)
+	cfgstruct.Bind(newCmd.Flags(), &newCfg)
 	cfgstruct.Bind(idCmd.Flags(), &idCfg)
 }
 
 func cmdNew(cmd *cobra.Command, args []string) (err error) {
-	_, err = provider.SetupCA(process.Ctx(cmd), newCACfg.CA)
+	_, err = provider.SetupCA(process.Ctx(cmd), newCfg.CA)
 	if err != nil {
 		return err
 	}
@@ -65,5 +65,5 @@ func cmdID(cmd *cobra.Command, args []string) (err error) {
 }
 
 func main() {
-	process.Exec(RootCmd)
+	process.Exec(rootCmd)
 }
