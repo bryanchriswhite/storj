@@ -12,6 +12,7 @@ import (
 
 	"storj.io/storj/pkg/cfgstruct"
 	"storj.io/storj/pkg/process"
+	"fmt"
 )
 
 var (
@@ -31,11 +32,11 @@ var (
 	}
 
 	addCfg struct {
-		nodesPath string
+		NodesPath string
 	}
 
 	clearCfg struct {
-		exceptPath string
+		ExceptPath string
 	}
 )
 
@@ -46,7 +47,7 @@ func init() {
 }
 
 func cmdAdd(cmd *cobra.Command, args []string) (err error) {
-	j, err := ioutil.ReadFile(addCfg.nodesPath)
+	j, err := ioutil.ReadFile(addCfg.NodesPath)
 	if err != nil {
 		return errs.Wrap(err)
 	}
@@ -54,11 +55,12 @@ func cmdAdd(cmd *cobra.Command, args []string) (err error) {
 	type id string
 	type address string
 	var nodes map[id]address
-	if err := json.Unmarshal(j, nodes); err != nil {
+	if err := json.Unmarshal(j, &nodes); err != nil {
 		return errs.Wrap(err)
 	}
 
 	// TODO add records to cache
+	fmt.Println(nodes)
 
 	return nil
 }
