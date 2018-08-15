@@ -1,14 +1,14 @@
 // Copyright (C) 2018 Storj Labs, Inc.
 // See LICENSE for copying information.
 
-package identity
+package main
 
 import (
 	"github.com/spf13/cobra"
 
 	"storj.io/storj/pkg/cfgstruct"
-	"storj.io/storj/pkg/provider"
 	"storj.io/storj/pkg/process"
+	"storj.io/storj/pkg/provider"
 )
 
 var (
@@ -23,7 +23,7 @@ var (
 	}
 
 	newCfg struct {
-		CA provider.FullCAConfig
+		CA       provider.FullCAConfig
 		Identity provider.IdentitySetupConfig
 	}
 )

@@ -6,15 +6,17 @@ package provider
 import (
 	"context"
 	"crypto"
+	"crypto/ecdsa"
 	"crypto/x509"
 	"encoding/pem"
 	"io/ioutil"
 	"os"
+	"reflect"
 
 	"github.com/zeebo/errs"
+
 	"storj.io/storj/pkg/peertls"
 	"storj.io/storj/pkg/utils"
-	"crypto/ecdsa"
 )
 
 // PeerCertificateAuthority represents the CA which is used to validate peer identities
@@ -87,12 +89,12 @@ func (fc FullCAConfig) Load() (*FullCertificateAuthority, error) {
 		return nil, errs.New("unable to parse EC private key", err)
 	}
 
-	kEC, ok := p.Cert.PublicKey.(ecdsa.PublicKey)
+	kEC, ok := p.Cert.PublicKey.(*ecdsa.PublicKey)
 	if !ok {
 		return nil, peertls.ErrUnsupportedKey.New("certificate public key type not supported: %T", k)
 	}
 
-	if k.PublicKey != kEC {
+	if !reflect.DeepEqual(k.PublicKey, *kEC) {
 		return nil, errs.New("certificate public key and loaded")
 	}
 

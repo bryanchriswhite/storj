@@ -84,7 +84,7 @@ func SetupCA(ctx context.Context, c CASetupConfig) (*FullCertificateAuthority, e
 }
 
 // SetupIdentity ensures a CA and identity exist and returns a config overrides map
-func SetupIdentity(ctx context.Context, c CASetupConfig, i IdentitySetupConfig) (error) {
+func SetupIdentity(ctx context.Context, c CASetupConfig, i IdentitySetupConfig) error {
 	ca, err := SetupCA(ctx, c)
 	if err != nil {
 		return err
