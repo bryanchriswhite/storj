@@ -6,9 +6,32 @@
 *.dll
 *.so
 *.dylib
+*.db
 
 # Test binary, build with `go test -c`
 *.test
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+
+# VSCode
+/.vscode
+debug
+
+# Binaries
+./main
+./storj
+
+# Jetbrains
+.idea/
+
+# vendor
+vendor
+protos/google/*
+
+# Test redis log and snapshot files
+*test_redis-server.log
+*dump.rdb
+*test_bolt.db
+
+*.coverprofile

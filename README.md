@@ -1,56 +1,149 @@
 # Storj
 
-[![Go Report Card](https://goreportcard.com/badge/github.com/golang-standards/project-layout?style=flat-square)](https://goreportcard.com/report/github.com/storj/storj)
+[![Go Report Card](https://goreportcard.com/badge/github.com/storj/storj)](https://goreportcard.com/report/github.com/storj/storj)
 [![Go Doc](https://img.shields.io/badge/godoc-reference-blue.svg?style=flat-square)](http://godoc.org/github.com/storj/storj)
-[![Release](https://img.shields.io/github/release/golang-standards/project-layout.svg?style=flat-square)](https://github.com/storj/storj/releases/latest)
+[![Coverage Status](https://coveralls.io/repos/github/storj/storj/badge.svg?branch=master)](https://coveralls.io/github/storj/storj?branch=master)
 
-<img src="https://github.com/Storj/storj/blob/wip/logo/logo.png" width="100">
+<img src="https://github.com/storj/storj/raw/master/logo/logo.png" width="100">
 
-----
-
-Storj is a platform, cryptocurrency, and suite of decentralized applications that allows you to store data in a secure and decentralized manner. Your files are encrypted, shredded into little pieces called 'shards', and stored in a decentralized network of computers around the globe. No one but you has a complete copy of your file, not even in an ecrypted form.
+Storj is in the midst of a rearchitecture. Please stay tuned for our v3 whitepaper!
 
 ----
 
-## To start using Storj
+Storj is a platform, token, and suite of decentralized applications that allows you to store data in a secure and decentralized manner. Your files are encrypted, shredded into little pieces and stored in a global decentralized network of computers. Luckily, we also support allowing you (and only you) to recover them!
 
-See our documentation at [storj docs](https://docs.storj.io/docs).
+# Start Using Storj
 
+### Download the latest release
 
-## To start developing storj
+Go here to download the latest build
+// TODO: add link when a build is released
+// TODO for how to run the release
 
-The [community site](https://storj.io/community.html) hosts all information about
-building storj from source, how to contribute code
-and documentation, who to contact about what, etc.
+### Configure AWS CLI
 
-If you want to build storj right away there are two options:
+In a new terminal session:
 
-##### You have a working [Go environment](https://golang.org/doc/install).
+Download and install the AWS CLI: https://docs.aws.amazon.com/cli/latest/userguide/installing.html
 
+Configure the AWS CLI:
+```bash
+$ aws configure
+AWS Access Key ID [None]: insecure-dev-access-key
+AWS Secret Access Key [None]: insecure-dev-secret-key
+Default region name [None]: us-east-1
+Default output format [None]: 
+$ aws configure set default.s3.multipart_threshold 1TB  # until we support multipart
 ```
-$ go get -d storj.io/storj
-$ cd $GOPATH/src/storj.io/storj
-$ make
+Test some commands:
+
+### Upload an Object
+
+```bash
+$ aws s3 --endpoint=http://localhost:7777/ cp ~/Desktop/your-large-file.mp4 s3://bucket/your-large-file.mp4
 ```
 
-##### You have a working [Docker environment](https://docs.docker.com/engine).
+### Download an Object
 
-```
-$ git clone https://github.com/storj/storj
-$ cd storj
-$ make docker
+```bash
+$ aws s3 --endpoint=http://localhost:7777/ cp s3://bucket/your-large-file.mp4 ~/Desktop/your-large-file.mp4
 ```
 
-For the full story, head over to the [developer's documentation].
+### List Objects
+
+```bash
+aws s3 --endpoint=http://localhost:7777/ ls s3://bucket/ --recursive
+```
+
+
+### Delete Objects in a Bucket
+
+```bash
+aws s3 --endpoint=http://localhost:7777/ rm --recursive  s3://bucket/
+```
+
+### Generate a URL for an Object
+
+```bash
+aws s3 --endpoint=http://localhost:7777/ presign s3://bucket/your-large-file.mp4
+```
+
+For more information about the AWS s3 CLI visit: https://docs.aws.amazon.com/cli/latest/reference/s3/index.html
+
+
+# Start Contributing to Storj
+
+### Install required packages
+
+First, install git and golang. We currently support Debian-based and Mac operating systems
+
+#### Debian based (like Ubuntu)
+
+Download and install the latest release of go https://golang.org/
+
+```bash
+apt-get install git golang
+echo 'export STORJDEV="$HOME/storj"' >> $HOME/.bashrc
+echo 'export GOPATH="$STORJDEV:$STORJDEV/vendor"' >> $HOME/.bashrc
+echo 'export PATH="$PATH:$STORJDEV/bin"' >> $HOME/.bashrc
+source $HOME/.bashrc
+```
+
+#### Mac OSX
+
+```bash
+brew install git go
+if test -e $HOME/.bash_profile
+then
+	echo 'export STORJDEV="$HOME/storj"' >> $HOME/.bash_profile
+	echo 'export GOPATH="$STORJDEV:$STORJDEV/vendor"' >> $HOME/.bash_profile
+	echo 'export PATH="$PATH:$STORJDEV/bin"' >> $HOME/.bash_profile
+	source $HOME/.bash_profile
+else
+	echo 'export STORJDEV="$HOME/storj"' >> $HOME/.profile
+	echo 'export GOPATH="$STORJDEV:$STORJDEV/vendor"' >> $HOME/.profile
+	echo 'export PATH="$PATH:$STORJDEV/bin"' >> $HOME/.profile
+	source $HOME/.profile
+fi
+```
+
+### Install storj
+
+Clone the storj repository. You may want to clone your own fork and branch.
+
+```bash
+mkdir -p $STORJDEV/src/storj.io
+git clone https://github.com/storj/storj $STORJDEV/src/storj.io/storj
+```
+
+#### Install all dependencies
+
+```bash
+git clone --recursive https://github.com/storj/storj-vendor $STORJDEV/vendor
+rm -rf $STORJDEV/vendor/src/github.com/minio/minio/vendor/github.com/minio/cli
+rm -rf $STORJDEV/vendor/src/github.com/minio/minio/vendor/golang.org/x/net/trace
+```
+
+### Start the network
+
+```bash
+$ go install -v storj.io/storj/cmd/captplanet
+$ captplanet setup
+$ captplanet run
+```
+
+### Try out some commands via Storj CLI or AWS CLI
+
+### Run unit tests
+
+```bash
+go test storj.io/storj/...
+```
+
+You can execute only a single test package. For example: `go test storj.io/storj/pkg/kademlia`. Add -v for more informations about the executed unit tests.
 
 ## Support
 
-If you need support, start with the [troubleshooting guide],
-and work your way through the process that we've outlined.
-
-That said, if you have questions, reach out to us
-[twitter](https://twitter.com/storjproject).
-
-
+If you have any questions or suggestions please reach out to us on [Rocketchat](https://community.storj.io/) or [Twitter](https://twitter.com/storjproject).
 
 

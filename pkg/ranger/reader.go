@@ -1,0 +1,141 @@
+// Copyright (C) 2018 Storj Labs, Inc.
+// See LICENSE for copying information.
+
+package ranger
+
+import (
+	"bytes"
+	"context"
+	"io"
+	"io/ioutil"
+
+	"storj.io/storj/internal/pkg/readcloser"
+)
+
+// A Ranger is a flexible data stream type that allows for more effective
+// pipelining during seeking. A Ranger can return multiple parallel Readers for
+// any subranges.
+type Ranger interface {
+	Size() int64
+	Range(ctx context.Context, offset, length int64) (io.ReadCloser, error)
+}
+
+// A RangeCloser is a Ranger that must be closed when finished
+type RangeCloser interface {
+	Ranger
+	io.Closer
+}
+
+// NopCloser makes an existing Ranger function as a RangeCloser
+// with a no-op for Close()
+func NopCloser(r Ranger) RangeCloser {
+	return struct {
+		Ranger
+		io.Closer
+	}{
+		Ranger: r,
+		Closer: ioutil.NopCloser(nil),
+	}
+}
+
+// ByteRanger turns a byte slice into a Ranger
+type ByteRanger []byte
+
+// Size implements Ranger.Size
+func (b ByteRanger) Size() int64 { return int64(len(b)) }
+
+// Range implements Ranger.Range
+func (b ByteRanger) Range(ctx context.Context, offset, length int64) (io.ReadCloser, error) {
+	if offset < 0 {
+		return nil, Error.New("negative offset")
+	}
+	if length < 0 {
+		return nil, Error.New("negative length")
+	}
+	if offset+length > int64(len(b)) {
+		return nil, Error.New("buffer runoff")
+	}
+
+	return ioutil.NopCloser(bytes.NewReader(b[offset : offset+length])), nil
+}
+
+// ByteRangeCloser turns a byte slice into a RangeCloser
+func ByteRangeCloser(data []byte) RangeCloser {
+	return NopCloser(ByteRanger(data))
+}
+
+type concatReader struct {
+	r1 Ranger
+	r2 Ranger
+}
+
+func (c *concatReader) Size() int64 {
+	return c.r1.Size() + c.r2.Size()
+}
+
+func (c *concatReader) Range(ctx context.Context, offset, length int64) (io.ReadCloser, error) {
+	r1Size := c.r1.Size()
+	if offset+length <= r1Size {
+		return c.r1.Range(ctx, offset, length)
+	}
+	if offset >= r1Size {
+		return c.r2.Range(ctx, offset-r1Size, length)
+	}
+	r1Range, err := c.r1.Range(ctx, offset, r1Size-offset)
+	if err != nil {
+		return nil, err
+	}
+	return readcloser.MultiReadCloser(
+		r1Range,
+		readcloser.LazyReadCloser(func() (io.ReadCloser, error) {
+			return c.r2.Range(ctx, 0, length-(r1Size-offset))
+		})), nil
+}
+
+func concat2(r1, r2 Ranger) Ranger {
+	return &concatReader{r1: r1, r2: r2}
+}
+
+// Concat concatenates Rangers
+func Concat(r ...Ranger) Ranger {
+	switch len(r) {
+	case 0:
+		return ByteRanger(nil)
+	case 1:
+		return r[0]
+	case 2:
+		return concat2(r[0], r[1])
+	default:
+		mid := len(r) / 2
+		return concat2(Concat(r[:mid]...), Concat(r[mid:]...))
+	}
+}
+
+type subrange struct {
+	r              RangeCloser
+	offset, length int64
+}
+
+// Subrange returns a subset of a Ranger.
+func Subrange(data RangeCloser, offset, length int64) (RangeCloser, error) {
+	dSize := data.Size()
+	if offset < 0 || offset > dSize {
+		return nil, Error.New("invalid offset")
+	}
+	if length+offset > dSize {
+		return nil, Error.New("invalid length")
+	}
+	return &subrange{r: data, offset: offset, length: length}, nil
+}
+
+func (s *subrange) Size() int64 {
+	return s.length
+}
+
+func (s *subrange) Range(ctx context.Context, offset, length int64) (io.ReadCloser, error) {
+	return s.r.Range(ctx, offset+s.offset, length)
+}
+
+func (s *subrange) Close() error {
+	return s.r.Close()
+}
