@@ -58,6 +58,29 @@ type FullCAConfig struct {
 	KeyPath  string `help:"path to the private key for this identity" default:"$CONFDIR/ca.key"`
 }
 
+// NewCA creates a new full identity with the given difficulty
+func NewCA(ctx context.Context, difficulty uint16, concurrency uint) (*FullCertificateAuthority, error) {
+	if concurrency < 1 {
+		concurrency = 1
+	}
+	ctx, cancel := context.WithCancel(ctx)
+
+	eC := make(chan error)
+	caC := make(chan FullCertificateAuthority, 1)
+	for i := 0; i < int(concurrency); i++ {
+		go newCAWorker(ctx, difficulty, caC, eC)
+	}
+
+	select {
+	case ca := <-caC:
+		cancel()
+		return &ca, nil
+	case err := <-eC:
+		cancel()
+		return nil, err
+	}
+}
+
 // Status returns the status of the CA cert/key files for the config
 func (caS CASetupConfig) Status() TLSFilesStatus {
 	return statTLSFiles(caS.CertPath, caS.KeyPath)
@@ -109,6 +132,29 @@ func (fc FullCAConfig) Load() (*FullCertificateAuthority, error) {
 	}, nil
 }
 
+// Save saves a CA with the given configuration
+func (fc FullCAConfig) Save(ca *FullCertificateAuthority) error {
+	f := os.O_WRONLY | os.O_CREATE
+	c, err := openCert(fc.CertPath, f)
+	if err != nil {
+		return err
+	}
+	defer utils.LogClose(c)
+	k, err := openKey(fc.KeyPath, f)
+	if err != nil {
+		return err
+	}
+	defer utils.LogClose(k)
+
+	if err = peertls.WriteChain(c, ca.Cert); err != nil {
+		return err
+	}
+	if err = peertls.WriteKey(k, ca.Key); err != nil {
+		return err
+	}
+	return nil
+}
+
 // PeerConfig converts a full ca config to a peer ca config
 func (fc FullCAConfig) PeerConfig() PeerCAConfig {
 	return PeerCAConfig{
@@ -147,52 +193,6 @@ func (pc PeerCAConfig) Load() (*PeerCertificateAuthority, error) {
 		Cert: c[0],
 		ID:   i,
 	}, nil
-}
-
-// NewCA creates a new full identity with the given difficulty
-func NewCA(ctx context.Context, difficulty uint16, concurrency uint) (*FullCertificateAuthority, error) {
-	if concurrency < 1 {
-		concurrency = 1
-	}
-	ctx, cancel := context.WithCancel(ctx)
-
-	eC := make(chan error)
-	caC := make(chan FullCertificateAuthority, 1)
-	for i := 0; i < int(concurrency); i++ {
-		go newCAWorker(ctx, difficulty, caC, eC)
-	}
-
-	select {
-	case ca := <-caC:
-		cancel()
-		return &ca, nil
-	case err := <-eC:
-		cancel()
-		return nil, err
-	}
-}
-
-// Save saves a CA with the given configuration
-func (fc FullCAConfig) Save(ca *FullCertificateAuthority) error {
-	f := os.O_WRONLY | os.O_CREATE
-	c, err := openCert(fc.CertPath, f)
-	if err != nil {
-		return err
-	}
-	defer utils.LogClose(c)
-	k, err := openKey(fc.KeyPath, f)
-	if err != nil {
-		return err
-	}
-	defer utils.LogClose(k)
-
-	if err = peertls.WriteChain(c, ca.Cert); err != nil {
-		return err
-	}
-	if err = peertls.WriteKey(k, ca.Key); err != nil {
-		return err
-	}
-	return nil
 }
 
 // NewIdentity generates a new `FullIdentity` based on the CA. The CA
