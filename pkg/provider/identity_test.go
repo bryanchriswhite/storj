@@ -95,7 +95,7 @@ func TestFullIdentityFromPEM(t *testing.T) {
 }
 
 func TestIdentityConfig_SaveIdentity(t *testing.T) {
-	done, ic, fi, _ := tempIdentity(t)
+	ic, fi, _, done := tempIdentity(t)
 	defer done()
 
 	chainPEM := bytes.NewBuffer([]byte{})
@@ -137,10 +137,10 @@ func TestIdentityConfig_SaveIdentity(t *testing.T) {
 	assert.Equal(t, keyPEM.Bytes(), savedKeyPEM)
 }
 
-func tempIdentityConfig() (*IdentityConfig, func(), error) {
+func tempIdentityConfig() (*IdentityConfig, error, func()) {
 	tmpDir, err := ioutil.TempDir("", "tempIdentity")
 	if err != nil {
-		return nil, nil, err
+		return nil, err, nil
 	}
 
 	cleanup := func() { os.RemoveAll(tmpDir) }
@@ -148,10 +148,10 @@ func tempIdentityConfig() (*IdentityConfig, func(), error) {
 	return &IdentityConfig{
 		CertPath: filepath.Join(tmpDir, "chain.pem"),
 		KeyPath:  filepath.Join(tmpDir, "key.pem"),
-	}, cleanup, nil
+	}, nil, cleanup
 }
 
-func tempIdentity(t *testing.T) (func(), *IdentityConfig, *FullIdentity, uint16) {
+func tempIdentity(t *testing.T) (*IdentityConfig, *FullIdentity, uint16, func()) {
 	// NB: known difficulty
 	difficulty := uint16(12)
 
@@ -180,17 +180,17 @@ AwEHoUQDQgAEoLy/0hs5deTXZunRumsMkiHpF0g8wAc58aXANmr7Mxx9tzoIYFnx
 0YN4VDKdCtUJa29yA6TIz1MiIDUAcB5YCA==
 -----END EC PRIVATE KEY-----`
 
-	ic, cleanup, err := tempIdentityConfig()
+	ic, err, cleanup := tempIdentityConfig()
 	assert.NoError(t, err)
 
 	fi, err := FullIdentityFromPEM([]byte(chain), []byte(key))
 	assert.NoError(t, err)
 
-	return cleanup, ic, fi, difficulty
+	return ic, fi, difficulty, cleanup
 }
 
 func TestIdentityConfig_LoadIdentity(t *testing.T) {
-	done, ic, expectedFI, _ := tempIdentity(t)
+	ic, expectedFI, _, done := tempIdentity(t)
 	defer done()
 
 	err := ic.Save(expectedFI)
@@ -211,7 +211,7 @@ func TestIdentityConfig_LoadIdentity(t *testing.T) {
 }
 
 func TestNodeID_Difficulty(t *testing.T) {
-	done, _, fi, knownDifficulty := tempIdentity(t)
+	_, fi, knownDifficulty, done := tempIdentity(t)
 	defer done()
 
 	difficulty := fi.ID.Difficulty()
