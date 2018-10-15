@@ -28,7 +28,7 @@ func TestPeerIdentityFromCertChain(t *testing.T) {
 	assert.NoError(t, err)
 
 	cp, _ := k.(*ecdsa.PrivateKey)
-	c, err := peertls.NewCert(caT, nil, &cp.PublicKey, k)
+	c, err := peertls.NewCert(&caT, nil, &cp.PublicKey, k)
 	assert.NoError(t, err)
 
 	lT, err := peertls.LeafTemplate()
@@ -38,7 +38,7 @@ func TestPeerIdentityFromCertChain(t *testing.T) {
 	assert.NoError(t, err)
 
 	lp, _ := lk.(*ecdsa.PrivateKey)
-	l, err := peertls.NewCert(lT, caT, &lp.PublicKey, k)
+	l, err := peertls.NewCert(&lT, &caT, &lp.PublicKey, k)
 	assert.NoError(t, err)
 
 	pi, err := PeerIdentityFromCerts(l, c)
@@ -56,7 +56,7 @@ func TestFullIdentityFromPEM(t *testing.T) {
 	assert.NoError(t, err)
 
 	cp, _ := ck.(*ecdsa.PrivateKey)
-	c, err := peertls.NewCert(caT, nil, &cp.PublicKey, ck)
+	c, err := peertls.NewCert(&caT, nil, &cp.PublicKey, ck)
 	assert.NoError(t, err)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, c)
@@ -68,7 +68,7 @@ func TestFullIdentityFromPEM(t *testing.T) {
 	assert.NoError(t, err)
 
 	lp, _ := lk.(*ecdsa.PrivateKey)
-	l, err := peertls.NewCert(lT, caT, &lp.PublicKey, ck)
+	l, err := peertls.NewCert(&lT, &caT, &lp.PublicKey, ck)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, l)
 
@@ -219,17 +219,18 @@ func TestNodeID_Difficulty(t *testing.T) {
 }
 
 func TestVerifyPeer(t *testing.T) {
-	check := func(e error) {
-		if !assert.NoError(t, e) {
-			t.Fail()
-		}
-	}
+	check := newChecker(t)
 
 	ca, err := NewCA(context.Background(), 12, 4)
-	check(err)
+	check.e(err)
 	fi, err := ca.NewIdentity()
-	check(err)
+	check.e(err)
 
 	err = peertls.VerifyPeerFunc(peertls.VerifyPeerCertChains)([][]byte{fi.Leaf.Raw, fi.CA.Raw}, nil)
 	assert.NoError(t, err)
+}
+
+func TestCheckPeerRevocations(t *testing.T)  {
+	// TODO
+	t.SkipNow()
 }

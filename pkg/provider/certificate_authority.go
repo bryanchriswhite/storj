@@ -10,13 +10,18 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"io/ioutil"
-	"os"
 	"reflect"
 
 	"github.com/zeebo/errs"
 
+	"crypto/x509/pkix"
+	"encoding/asn1"
+	"go.uber.org/zap"
+	"os"
 	"storj.io/storj/pkg/peertls"
 	"storj.io/storj/pkg/utils"
+	"storj.io/storj/storage"
+	"storj.io/storj/storage/boltdb"
 )
 
 // PeerCertificateAuthority represents the CA which is used to validate peer identities
@@ -37,6 +42,14 @@ type FullCertificateAuthority struct {
 	Key crypto.PrivateKey
 }
 
+// RevocationDB is a key/value store for keeping track of certificate revocations
+type RevocationDB interface {
+	Get(*PeerIdentity) (*pkix.CertificateList, error)
+}
+type BoltRevocationDB struct {
+	db storage.KeyValueStore
+}
+
 // CASetupConfig is for creating a CA
 type CASetupConfig struct {
 	CertPath    string `help:"path to the certificate chain for this identity" default:"$CONFDIR/ca.cert"`
@@ -54,8 +67,14 @@ type PeerCAConfig struct {
 
 // FullCAConfig is for locating a CA certificate and it's private key
 type FullCAConfig struct {
-	CertPath string `help:"path to the certificate chain for this identity" default:"$CONFDIR/ca.cert"`
-	KeyPath  string `help:"path to the private key for this identity" default:"$CONFDIR/ca.key"`
+	CertPath     string `help:"path to the certificate chain for this identity" default:"$CONFDIR/ca.cert"`
+	KeyPath      string `help:"path to the private key for this identity" default:"$CONFDIR/ca.key"`
+	RevocationDB RevocationDBConfig
+}
+
+type RevocationDBConfig struct {
+	Path    string `help:"path to the certificate revocation database" default:"$CONFDIR/revocations.db"`
+	MaxSize string `help:"maximum size before overwriting old revocations(\"0\" is unlimited)" default:"100M"`
 }
 
 // NewCA creates a new full identity with the given difficulty
@@ -79,6 +98,46 @@ func NewCA(ctx context.Context, difficulty uint16, concurrency uint) (*FullCerti
 		cancel()
 		return nil, err
 	}
+}
+
+// Open creates or loads the revocation database described by the config
+func (dc RevocationDBConfig) Open() (RevocationDB, error) {
+	// TODO: newChecker db size against `dc.MaxSize? Warn?
+	b, err := boltdb.NewClient(zap.L(), dc.Path, "revocations")
+	if err != nil {
+		return nil, err
+	}
+
+	return &BoltRevocationDB{
+		db: b,
+	}, nil
+}
+
+// TODO: comment
+func (d BoltRevocationDB) Get(pi *PeerIdentity) (r *pkix.CertificateList, err error) {
+	v, err := d.db.Get(pi.ID.Bytes())
+	if err != nil {
+		return nil, err
+	}
+	if v.IsZero() {
+		return nil, nil
+	}
+
+	_, err = asn1.Unmarshal(v, r)
+	if err != nil {
+		return nil, errs.Wrap(err)
+	}
+
+	return r, nil
+}
+
+// TODO: comment
+func (d BoltRevocationDB) Put(pi *PeerIdentity, r *pkix.CertificateList) (error) {
+	v, err := asn1.Marshal(r)
+	if err != nil {
+		return err
+	}
+	return d.db.Put(pi.ID.Bytes(), v)
 }
 
 // Status returns the status of the CA cert/key files for the config
@@ -211,7 +270,7 @@ func (ca FullCertificateAuthority) NewIdentity() (*FullIdentity, error) {
 	if !ok {
 		return nil, peertls.ErrUnsupportedKey.New("%T", k)
 	}
-	l, err := peertls.NewCert(lT, ca.Cert, &pk.PublicKey, ca.Key)
+	l, err := peertls.NewCert(&lT, ca.Cert, &pk.PublicKey, ca.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -222,4 +281,58 @@ func (ca FullCertificateAuthority) NewIdentity() (*FullIdentity, error) {
 		Key:  k,
 		ID:   ca.ID,
 	}, nil
+}
+
+// TODO: comment
+func (ca FullCertificateAuthority) RevokeIdentity(ri *FullIdentity) (*pkix.CertificateList, error) {
+	r, err := peertls.RevokeCert(ri.Leaf, ca.Key)
+	if err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// TODO: comment
+func (ca FullCertificateAuthority) RotateIdentity(ri *FullIdentity) (*FullIdentity, error) {
+	r, err := ca.RevokeIdentity(ri)
+	if err != nil {
+		return nil, err
+	}
+	v, err := asn1.Marshal(*r)
+	if err != nil {
+		return nil, err
+	}
+	e := pkix.Extension{
+		Id:       peertls.OIDExample,
+		Critical: true,
+		Value:    v,
+	}
+
+	lT, err := peertls.LeafTemplate()
+	if err != nil {
+		return nil, err
+	}
+	k, err := peertls.NewKey()
+	if err != nil {
+		return nil, err
+	}
+	pk, ok := k.(*ecdsa.PrivateKey)
+	if !ok {
+		return nil, peertls.ErrUnsupportedKey.New("%T", k)
+	}
+
+	lT.ExtraExtensions = append(lT.ExtraExtensions, e)
+	l, err := peertls.NewCert(&lT, ca.Cert, &pk.PublicKey, ca.Key)
+	if err != nil {
+		return nil, err
+	}
+
+	fi := &FullIdentity{
+		CA:   ca.Cert,
+		Leaf: l,
+		Key:  k,
+		ID:   ca.ID,
+	}
+
+	return fi, nil
 }

@@ -9,8 +9,11 @@ import (
 	"crypto/rand"
 	"crypto/tls"
 	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/asn1"
 	"encoding/pem"
 	"io"
+	"time"
 
 	"github.com/zeebo/errs"
 )
@@ -38,6 +41,9 @@ var (
 	ErrVerifyPeerCert = errs.Class("tls peer certificate verification error")
 	// ErrVerifySignature is used when a cert-chain signature verificaion error occurs
 	ErrVerifySignature = errs.Class("tls certificate signature verification error")
+
+	// NB: see http://oid-info.com/get/2.999
+	OIDExample = asn1.ObjectIdentifier{2, 999}
 )
 
 // PeerCertVerificationFunc is the signature for a `*tls.Config{}`'s
@@ -82,6 +88,36 @@ func NewCert(template, parentTemplate *x509.Certificate, pubKey crypto.PublicKey
 		return nil, errs.Wrap(err)
 	}
 	return c, nil
+}
+
+// TODO: comment
+func RevokeCert(c *x509.Certificate, signer crypto.PrivateKey) (*pkix.CertificateList, error) {
+	r := []pkix.RevokedCertificate{
+		{
+			SerialNumber:   c.SerialNumber,
+			RevocationTime: time.Now(),
+		},
+	}
+	// v, err := asn1.Marshal(r)
+	// if err != nil {
+	// 	return nil, err
+	// }
+	//
+	// return &pkix.Extension{
+	// 	Id:       OIDExample,
+	// 	Critical: true,
+	// 	Value:    v,
+	// }, nil
+	t := time.Now()
+	crlBytes, err := c.CreateCRL(rand.Reader, signer, r, t, t)
+	if err != nil {
+		errs.Wrap(err)
+	}
+	crl, err := x509.ParseCRL(crlBytes)
+	if err != nil {
+		return nil, errs.Wrap(err)
+	}
+	return crl, nil
 }
 
 // VerifyPeerFunc combines multiple `*tls.Config#VerifyPeerCertificate`

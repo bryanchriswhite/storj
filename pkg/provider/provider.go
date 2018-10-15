@@ -20,6 +20,10 @@ import (
 var (
 	// ErrSetup is returned when there's an error with setup
 	ErrSetup = errs.Class("setup error")
+	// ErrCertificate is returned when a certificate/chain is incompatible with our CA/Identity spec
+	ErrCertificate = errs.Class("invalid certificate/chain error")
+	// ErrRevoked is returned when the leaf certificate for an identity has been revoked
+	ErrRevoked = errs.Class("certificate revoked error")
 )
 
 // Responsibility represents a specific gRPC method collection to be registered
@@ -43,7 +47,7 @@ type Provider struct {
 func NewProvider(identity *FullIdentity, lis net.Listener,
 	responsibilities ...Responsibility) (*Provider, error) {
 	// NB: talk to anyone with an identity
-	ident, err := identity.ServerOption()
+	ident, err := identity.ServerOption(nil)
 	if err != nil {
 		return nil, err
 	}

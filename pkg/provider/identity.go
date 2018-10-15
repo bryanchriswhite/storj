@@ -22,6 +22,9 @@ import (
 	"fmt"
 	"math/bits"
 
+	"crypto/x509/pkix"
+	"encoding/asn1"
+	"reflect"
 	"storj.io/storj/pkg/peertls"
 	"storj.io/storj/pkg/utils"
 )
@@ -156,6 +159,50 @@ func PeerIdentityFromContext(ctx context.Context) (*PeerIdentity, error) {
 	return pi, nil
 }
 
+// CheckRevocations compares the chain against the revocation DB,
+// updating if a new, valid revocation is present
+// NB: only checks the first parsed chain
+func CheckRevocations(db RevocationDB) func([][]byte, [][]*x509.Certificate) error {
+	return func(_ [][]byte, parsedChains [][]*x509.Certificate) error {
+		err := checkRevocations(parsedChains[0], db)
+		if !ErrRevoked.Has(err) {
+		}
+
+		return err
+	}
+}
+
+func checkRevocations(chain []*x509.Certificate, db RevocationDB) error {
+	cl := len(chain)
+	if cl < 2 {
+		return ErrCertificate.New("chain length expected to be >= 2; got: %d", cl)
+	}
+
+	pi, err := PeerIdentityFromCerts(chain[0], chain[1])
+	if err != nil {
+		return err
+	}
+	r, err := db.Get(pi)
+	if err != nil {
+		return err
+	}
+	if r != nil {
+		return ErrRevoked.New("%s", r)
+	}
+
+	return nil
+}
+
+func revokedFromCert(c *x509.Certificate) *pkix.RevokedCertificate {
+	var r pkix.RevokedCertificate
+	for _, e := range c.Extensions {
+		if reflect.DeepEqual(e.Id, peertls.OIDExample) {
+			asn1.Unmarshal(e.Value, &r)
+		}
+	}
+	return &r
+}
+
 // Stat returns the status of the identity cert/key files for the config
 func (is IdentitySetupConfig) Stat() TLSFilesStatus {
 	return statTLSFiles(is.CertPath, is.KeyPath)
@@ -245,9 +292,22 @@ func (ic IdentityConfig) Run(ctx context.Context,
 	return s.Run(ctx)
 }
 
+// PeerCA returns a peer certificate authority based on the full identity
+func (fi *FullIdentity) PeerCA() *PeerCertificateAuthority {
+	return &PeerCertificateAuthority{
+		Cert: fi.CA,
+		ID: fi.ID,
+	}
+}
+
+// TODO: comment
+func (fi *FullIdentity) Revoked() *pkix.RevokedCertificate {
+	return revokedFromCert(fi.Leaf)
+}
+
 // ServerOption returns a grpc `ServerOption` for incoming connections
 // to the node with this full identity
-func (fi *FullIdentity) ServerOption() (grpc.ServerOption, error) {
+func (fi *FullIdentity) ServerOption(db RevocationDB) (grpc.ServerOption, error) {
 	ch := [][]byte{fi.Leaf.Raw, fi.CA.Raw}
 	c, err := peertls.TLSCert(ch, fi.Leaf, fi.Key)
 	if err != nil {
@@ -260,6 +320,8 @@ func (fi *FullIdentity) ServerOption() (grpc.ServerOption, error) {
 		ClientAuth:         tls.RequireAnyClientCert,
 		VerifyPeerCertificate: peertls.VerifyPeerFunc(
 			peertls.VerifyPeerCertChains,
+			// TODO
+			// CheckRevocations(db),
 		),
 	}
 

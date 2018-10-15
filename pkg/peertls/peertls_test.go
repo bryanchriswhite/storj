@@ -21,7 +21,7 @@ func TestNewCert_CA(t *testing.T) {
 	assert.NoError(t, err)
 
 	p, _ := k.(*ecdsa.PrivateKey)
-	c, err := NewCert(ct, nil, &p.PublicKey, k)
+	c, err := NewCert(&ct, nil, &p.PublicKey, k)
 	assert.NoError(t, err)
 
 	assert.NotEmpty(t, k.(*ecdsa.PrivateKey))
@@ -40,14 +40,14 @@ func TestNewCert_Leaf(t *testing.T) {
 	assert.NoError(t, err)
 
 	cp, _ := k.(*ecdsa.PrivateKey)
-	c, err := NewCert(ct, nil, &cp.PublicKey, k)
+	c, err := NewCert(&ct, nil, &cp.PublicKey, k)
 	assert.NoError(t, err)
 
 	lt, err := LeafTemplate()
 	assert.NoError(t, err)
 
 	lp, _ := k.(*ecdsa.PrivateKey)
-	l, err := NewCert(lt, ct, &lp.PublicKey, k)
+	l, err := NewCert(&lt, &ct, &lp.PublicKey, k)
 	assert.NoError(t, err)
 
 	assert.NotEmpty(t, k.(*ecdsa.PrivateKey))
@@ -68,14 +68,14 @@ func TestVerifyPeerFunc(t *testing.T) {
 	assert.NoError(t, err)
 
 	cp, _ := k.(*ecdsa.PrivateKey)
-	c, err := NewCert(ct, nil, &cp.PublicKey, k)
+	c, err := NewCert(&ct, nil, &cp.PublicKey, k)
 	assert.NoError(t, err)
 
 	lt, err := LeafTemplate()
 	assert.NoError(t, err)
 
 	lp, _ := k.(*ecdsa.PrivateKey)
-	l, err := NewCert(lt, ct, &lp.PublicKey, k)
+	l, err := NewCert(&lt, &ct, &lp.PublicKey, k)
 	assert.NoError(t, err)
 
 	testFunc := func(chain [][]byte, parsedChains [][]*x509.Certificate) error {
@@ -111,7 +111,7 @@ func TestVerifyPeerCertChains(t *testing.T) {
 
 	cp, ok := k.(*ecdsa.PrivateKey)
 	assert.True(t, ok)
-	c, err := NewCert(ct, nil, &cp.PublicKey, k)
+	c, err := NewCert(&ct, nil, &cp.PublicKey, k)
 	assert.NoError(t, err)
 
 	lt, err := LeafTemplate()
@@ -119,7 +119,7 @@ func TestVerifyPeerCertChains(t *testing.T) {
 
 	lp, ok := k.(*ecdsa.PrivateKey)
 	assert.True(t, ok)
-	l, err := NewCert(lt, ct, &lp.PublicKey, k)
+	l, err := NewCert(&lt, &ct, &lp.PublicKey, k)
 	assert.NoError(t, err)
 
 	err = VerifyPeerFunc(VerifyPeerCertChains)([][]byte{l.Raw, c.Raw}, nil)

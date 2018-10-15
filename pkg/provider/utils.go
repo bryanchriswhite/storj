@@ -101,7 +101,7 @@ func newCAWorker(ctx context.Context, difficulty uint16, caC chan FullCertificat
 		eC <- peertls.ErrUnsupportedKey.New("%T", k)
 		return
 	}
-	c, err := peertls.NewCert(ct, nil, &p.PublicKey, k)
+	c, err := peertls.NewCert(&ct, nil, &p.PublicKey, k)
 	if err != nil {
 		eC <- err
 		return
